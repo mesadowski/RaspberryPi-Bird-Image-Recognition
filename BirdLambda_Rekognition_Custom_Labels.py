@@ -1,24 +1,28 @@
-
 import boto3
 import datetime
 
 BIRD_TOPIC = 'arn:aws:sns:us-east-1:153104479668:bird-results'
 SQUIRREL_TOPIC = 'arn:aws:sns:us-east-1:153104479668:squirrel'
+REKOGNITION_MODEL = 'arn:aws:rekognition:us-east-1:153104479668:project/Birds/version/Birds.2020-11-26T14.11.34/1606417894474'
+CONFIDENCE = 70
+
 # list of labels to ignore
 IGNORE = ['Bird Feeder','Animal', 'Mammal', 'Chair', 'Furniture', \
             'Bench', 'Grass', 'Plant', 'Lawn','Lamp','Hydrant', \
             'Fire Hydrant', 'Lamp Post', 'Tree', 'Conifer', 'Water']  
 
-def detect_labels(bucket, key, min_confidence=40):
+def detect_labels(bucket, key, min_confidence=CONFIDENCE):
     client=boto3.client('rekognition')
     
     dt = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
 
-    response = client.detect_labels(Image={'S3Object': {'Bucket': bucket, 'Name': key}},
-        MinConfidence=min_confidence)
-    
+    response = client.detect_custom_labels(Image={'S3Object': {'Bucket': bucket, 'Name': key}},
+        MinConfidence=min_confidence,
+        ProjectVersionArn=REKOGNITION_MODEL)
+        
     outstring = '' 
-    for Label in response['Labels']:
+    print(response)
+    for Label in response['CustomLabels']:
         if not (Label['Name'] in IGNORE):
             outstring += str(Label['Name']) + ' (Confidence ' + str(Label['Confidence']) + ')\r\n'
             
@@ -53,7 +57,7 @@ def lambda_handler(event, context):
         #print(labels)
         if ('Squirrel' in labels) or ('Rodent' in labels) :
             send_to_sns(SQUIRREL_TOPIC,labels)
-        elif "Bird" in labels:
+        elif labels != '' :
             send_to_sns(BIRD_TOPIC,labels)
             
         return labels
