@@ -2,14 +2,19 @@
 import boto3
 import datetime
 
-BIRD_TOPIC = 'arn:aws:sns:us-east-1:153104479668:bird-results'
-SQUIRREL_TOPIC = 'arn:aws:sns:us-east-1:153104479668:squirrel'
+CONFIDENCE = 60
+WEBSITE_BUCKET = 'mike-bird-website'
+BIRD_TOPIC = 'arn:aws:sns:us-east-1:389195416133:bird-topic'
+SQUIRREL_TOPIC = 'arn:aws:sns:us-east-1:389195416133:squirrel-topic'
 # list of labels to ignore
-IGNORE = ['Bird Feeder','Animal', 'Mammal', 'Chair', 'Furniture', \
+IGNORE = ['Bird','Bird Feeder','Animal', 'Mammal', 'Chair', 'Furniture', \
             'Bench', 'Grass', 'Plant', 'Lawn','Lamp','Hydrant', \
-            'Fire Hydrant', 'Lamp Post', 'Tree', 'Conifer', 'Water']  
+            'Fire Hydrant', 'Lamp Post', 'Tree', 'Conifer', 'Water', 'Spruce', \
+            'Concrete','Letterbox','Mailbox','Aircraft','Vehicle','Transportation', \
+            'Airplane', 'Fir','Abies','Cross','Symbol','Hat','Ceiling Fan', \
+            'Light Fixture', 'Appliance','Outdoors']  
 
-def detect_labels(bucket, key, min_confidence=40):
+def detect_labels(bucket, key, min_confidence=CONFIDENCE):
     client=boto3.client('rekognition')
     
     dt = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
@@ -18,8 +23,12 @@ def detect_labels(bucket, key, min_confidence=40):
         MinConfidence=min_confidence)
     
     outstring = '' 
+    primary = ''
+    print(response['Labels'])
     for Label in response['Labels']:
         if not (Label['Name'] in IGNORE):
+            if primary == '':
+                primary = Label['Name']
             outstring += str(Label['Name']) + ' (Confidence ' + str(Label['Confidence']) + ')\r\n'
             
     if outstring != '':
@@ -28,7 +37,7 @@ def detect_labels(bucket, key, min_confidence=40):
     else:
         print('No labels detected')
 
-    return outstring
+    return primary,outstring
     
 def send_to_sns(topic_arn,msg):
 
@@ -49,14 +58,25 @@ def lambda_handler(event, context):
     
     try:
         # Call rekognition DetectLabels API to detect labels in S3 object
-        labels = detect_labels(bucket, key)
+        primary,label_text = detect_labels(bucket, key)
         #print(labels)
-        if ('Squirrel' in labels) or ('Rodent' in labels) :
-            send_to_sns(SQUIRREL_TOPIC,labels)
-        elif "Bird" in labels:
-            send_to_sns(BIRD_TOPIC,labels)
+        s3_resource = boto3.resource('s3')
+        if ('Squirrel' in label_text) or ('Rodent' in label_text) :
+            send_to_sns(SQUIRREL_TOPIC,label_text)
+        elif label_text != '':     #we'll assume it's a bird, since we already ignored other items which aren't interesting
+            send_to_sns(BIRD_TOPIC,label_text)
+        
+            #if it's a bird pic, move the picture to the website bucket 
+            new_path = 'birdpics/_'+key
+            old_path = bucket+'/'+key
+            print(old_path,new_path)
+            s3_resource.Object(WEBSITE_BUCKET,new_path).copy_from(CopySource=old_path)
             
-        return labels
+        #delete the original picture
+        print('deleting file: ',bucket+key)
+        s3_resource.Object(bucket,key).delete()
+            
+        return label_text
     except Exception as e:
         print(e)
         print("Error processing object {} from bucket {}. ".format(key, bucket) +
