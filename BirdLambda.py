@@ -2,17 +2,20 @@
 import boto3
 import datetime
 
-CONFIDENCE = 60
-WEBSITE_BUCKET = 'mike-bird-website'
+CONFIDENCE = 65
+WEBSITE_BUCKET = 'www.docugain.com'
 BIRD_TOPIC = 'arn:aws:sns:us-east-1:389195416133:bird-topic'
 SQUIRREL_TOPIC = 'arn:aws:sns:us-east-1:389195416133:squirrel-topic'
 # list of labels to ignore
-IGNORE = ['Bird','Bird Feeder','Animal', 'Mammal', 'Chair', 'Furniture', \
-            'Bench', 'Grass', 'Plant', 'Lawn','Lamp','Hydrant', \
-            'Fire Hydrant', 'Lamp Post', 'Tree', 'Conifer', 'Water', 'Spruce', \
-            'Concrete','Letterbox','Mailbox','Aircraft','Vehicle','Transportation', \
-            'Airplane', 'Fir','Abies','Cross','Symbol','Hat','Ceiling Fan', \
-            'Light Fixture', 'Appliance','Outdoors']  
+IGNORE = ['Bird','Bird Feeder','Beak','Animal', 'Mammal', 'Chair', 'Furniture','Brick','Windshield', 'Winter',\
+            'Bench', 'Grass', 'Plant', 'Lawn','Lamp','Hydrant','Plastic','Plastic Wrap','Stove','Sticker','Jay', \
+            'Fire Hydrant', 'Lamp Post', 'Tree', 'Conifer', 'Water', 'Spruce','Traffic Light','Light', \
+            'Concrete','Letterbox','Mailbox', 'Post Box','Public Mailbox','Aircraft','Vehicle','Transportation', \
+            'Airplane', 'Fir','Abies','Cross','Symbol','Hat','Ceiling Fan','Human','Person','Fish', \
+            'Light Fixture', 'Appliance','Outdoors','Window','Trash Can', 'Tin','Can','Hole','Oven', \
+            'Porthole','Home Decor','Statue', 'Sculpture','Art','Ornament','Label','Text','Hardhat', \
+            'Helmet','Apparel','Clothing','Aluminium','Forge','Nature','Ice','Snow','Bluebird', 'Blue Jay','Vegetation','Fire Hydrant']  
+
 
 def detect_labels(bucket, key, min_confidence=CONFIDENCE):
     client=boto3.client('rekognition')
@@ -58,7 +61,7 @@ def lambda_handler(event, context):
     
     try:
         # Call rekognition DetectLabels API to detect labels in S3 object
-        primary,label_text = detect_labels(bucket, key)
+        primary_label,label_text = detect_labels(bucket, key)
         #print(labels)
         s3_resource = boto3.resource('s3')
         if ('Squirrel' in label_text) or ('Rodent' in label_text) :
@@ -67,9 +70,9 @@ def lambda_handler(event, context):
             send_to_sns(BIRD_TOPIC,label_text)
         
             #if it's a bird pic, move the picture to the website bucket 
-            new_path = 'birdpics/_'+key
+            new_path = 'Latest/_'+primary_label+'_'+key
             old_path = bucket+'/'+key
-            print(old_path,new_path)
+            print(old_path,' , ',new_path)
             s3_resource.Object(WEBSITE_BUCKET,new_path).copy_from(CopySource=old_path)
             
         #delete the original picture
